@@ -6,8 +6,6 @@ import {
   PublicKey,
   TransactionInstruction,
 } from "@solana/web3.js";
-import yargs from "yargs";
-import { hideBin } from "yargs/helpers";
 import { initializeTaskQueue, monitorTask } from "./helpers";
 import { getKeypairFromFile } from "@solana-developers/helpers";
 
@@ -16,56 +14,35 @@ const MEMO_PROGRAM_ID = new PublicKey(
   "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"
 );
 
-const argv = await yargs(hideBin(process.argv))
-  .options({
-    queueName: {
-      type: "string",
-      description: "Name of the task queue",
-      demandOption: true,
-    },
-    walletPath: {
-      type: "string",
-      description: "Path to the wallet keypair file",
-      demandOption: true,
-    },
-    rpcUrl: {
-      type: "string",
-      description: "Solana RPC URL",
-      demandOption: true,
-    },
-    message: {
-      type: "string",
-      description: "Message to write in the memo",
-      default: "Hello World!",
-    },
-  })
-  .help()
-  .alias("help", "h").argv;
+// Configuration variables
+const queueName = "my-queue";
+const walletPath = "/Users/mike/.config/solana/id.json";
+const rpcUrl = "https://api.devnet.solana.com";
+const message = "Hello TukTuk!";
 
 // Load wallet from file
-const keypair: Keypair = await getKeypairFromFile(argv.walletPath);
+const keypair: Keypair = await getKeypairFromFile(walletPath);
 
 // Setup connection and provider
-const connection = new Connection(argv.rpcUrl, "confirmed");
+const connection = new Connection(rpcUrl, "confirmed");
 const wallet = new Wallet(keypair);
 const provider = new AnchorProvider(connection, wallet, {
   commitment: "confirmed",
 });
 
 console.log("Using wallet:", wallet.publicKey.toBase58());
-console.log("RPC URL:", argv.rpcUrl);
-console.log("Message:", argv.message);
+console.log("RPC URL:", rpcUrl);
+console.log("Message:", message);
 
 // Initialize TukTuk program
 const program = await init(provider);
-const queueName = argv.queueName;
 
 const taskQueue = await initializeTaskQueue(program, queueName);
 
 // Create a simple memo instruction
 const memoInstruction = new TransactionInstruction({
   keys: [],
-  data: Buffer.from(argv.message, "utf-8"),
+  data: Buffer.from(message, "utf-8"),
   programId: MEMO_PROGRAM_ID,
 });
 
@@ -90,7 +67,7 @@ const {
       transaction: {
         compiledV0: [transaction],
       },
-      description: `memo: ${argv.message}`,
+      description: `memo: ${message}`,
     },
   })
 )
