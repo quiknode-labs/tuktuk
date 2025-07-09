@@ -13,7 +13,7 @@ This directory contains TypeScript examples showing how to use the TukTuk SDK.
 
 ## Prerequisites
 
-- Node.js (v16 or higher)
+- Node.js (v20 or higher)
 - Solana CLI tools
 - A Solana wallet with some SOL for testing
 
@@ -22,7 +22,7 @@ This directory contains TypeScript examples showing how to use the TukTuk SDK.
 1. Install dependencies:
 
 ```bash
-yarn install
+npm i
 ```
 
 2. Create a Solana wallet for testing if you don't have one:
@@ -47,14 +47,10 @@ To run the example:
 
 ```bash
 # Show help and available options
-yarn memo -- --help
+npm run -- --help
 
 # Run with specific parameters
-yarn memo -- \
-  --queueName my-queue \
-  --walletPath ./wallet.json \
-  --rpcUrl https://api.devnet.solana.com \
-  --message "Hello TukTuk!"
+npm run -- --queueName my-queue --walletPath ./wallet.json  --rpcUrl https://api.devnet.solana.com --message "Hello TukTuk!"
 ```
 
 Required Parameters:
@@ -75,10 +71,10 @@ To run the example:
 
 ```bash
 # Show help and available options
-yarn cron-memo -- --help
+npm run cron-memo -- --help
 
 # Run with specific parameters
-yarn cron-memo -- \
+npm run cron-memo -- \
   --cronName my-cron \
   --queueName my-queue \
   --walletPath ./wallet.json \
@@ -117,10 +113,10 @@ To run the example:
 
 ```bash
 # Show help and available options
-yarn token-transfer -- --help
+npm run token-transfer -- --help
 
 # Run with specific parameters
-yarn token-transfer -- \
+npm run token-transfer -- \
   --queueName my-queue \
   --walletPath ./wallet.json \
   --rpcUrl https://api.devnet.solana.com
