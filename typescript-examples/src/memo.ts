@@ -15,7 +15,7 @@ const MEMO_PROGRAM_ID = new PublicKey(
 );
 
 // Configuration variables
-const queueName = "my-queue";
+const queueName = "banana-queue";
 const walletPath = "/Users/mike/.config/solana/id.json";
 const rpcUrl = "https://api.devnet.solana.com";
 const message = "Hello TukTuk!";
