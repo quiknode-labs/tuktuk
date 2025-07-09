@@ -12,10 +12,17 @@ import {
 } from "./helpers";
 import { getKeypairFromFile } from "@solana-developers/helpers";
 
-// Configuration variables
+// Name of the task queue (one will be created if it doesn't exist).
+// NOTE: This will cost 1 sol to create. You can recover this by deleting the queue using the tuktuk-cli
 const queueName = "banana-queue";
+
+// Path to your Solana wallet keypair file
 const walletPath = "/Users/mike/.config/solana/id.json";
+
+// Solana RPC URL (e.g., https://api.devnet.solana.com)
 const rpcUrl = "https://api.devnet.solana.com";
+
+// Message to write in the memo
 const message = "Hello TukTuk!";
 
 // Load wallet from file

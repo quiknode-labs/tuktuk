@@ -46,22 +46,8 @@ The `src/memo.ts` example demonstrates the basics of using TukTuk by queueing a 
 To run the example:
 
 ```bash
-# Show help and available options
-npm run -- --help
-
-# Run with specific parameters
-npm run -- --queueName my-queue --walletPath ./wallet.json  --rpcUrl https://api.devnet.solana.com --message "Hello TukTuk!"
+npm run memo
 ```
-
-Required Parameters:
-
-- `--queueName`: Name of the task queue (one will be created if it doesn't exist. NOTE: This will cost 1 sol to create. You can recover this by deleting the queue using the tuktuk-cli)
-- `--walletPath`: Path to your Solana wallet keypair file
-- `--rpcUrl`: Solana RPC URL (e.g., https://api.devnet.solana.com)
-
-Optional Parameters:
-
-- `--message`: Message to write in the memo (default: "Hello World!")
 
 ### Scheduled Memo Task (Cron)
 
