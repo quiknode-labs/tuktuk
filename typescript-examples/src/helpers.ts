@@ -7,9 +7,22 @@ import {
   taskQueueAuthorityKey,
   tuktukConfigKey,
 } from "@helium/tuktuk-sdk";
-import { Connection, PublicKey } from "@solana/web3.js";
+import { Connection, PublicKey, TransactionInstruction } from "@solana/web3.js";
 
 export const TUKTUK_CONFIG = tuktukConfigKey()[0];
+
+// Solana Memo Program ID
+const MEMO_PROGRAM_ID = new PublicKey(
+  "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"
+);
+
+export function makeMemoInstruction(message: string): TransactionInstruction {
+  return new TransactionInstruction({
+    keys: [],
+    data: Buffer.from(message, "utf-8"),
+    programId: MEMO_PROGRAM_ID,
+  });
+}
 
 const HOURS = 60 * 60;
 

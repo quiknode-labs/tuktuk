@@ -6,13 +6,9 @@ import {
   PublicKey,
   TransactionInstruction,
 } from "@solana/web3.js";
-import { initializeTaskQueue, monitorTask } from "./helpers";
+import { initializeTaskQueue, monitorTask, makeMemoInstruction } from "./helpers";
 import { getKeypairFromFile } from "@solana-developers/helpers";
 
-// Solana Memo Program ID
-const MEMO_PROGRAM_ID = new PublicKey(
-  "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"
-);
 
 // Configuration variables
 const queueName = "banana-queue";
