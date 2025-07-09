@@ -20,17 +20,16 @@ export async function initializeTaskQueue(
   let taskQueue = await getTaskQueueForName(program, name);
   if (!taskQueue) {
     console.log("Task queue not found, creating...");
+    const createTaskQueueTransaction = await createTaskQueue(program, {
+      name,
+      minCrankReward: new BN(10000),
+      capacity: 10,
+      lookupTables: [],
+      staleTaskAge: 48 * HOURS,
+    });
     const {
       pubkeys: { taskQueue: taskQueuePubkey },
-    } = await (
-      await createTaskQueue(program, {
-        name,
-        minCrankReward: new BN(10000),
-        capacity: 10,
-        lookupTables: [],
-        staleTaskAge: 48 * HOURS,
-      })
-    ).rpcAndKeys();
+    } = await createTaskQueueTransaction.rpcAndKeys();
     taskQueue = taskQueuePubkey;
   }
 
