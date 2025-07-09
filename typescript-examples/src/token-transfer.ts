@@ -6,7 +6,7 @@ import {
   customSignerSeedsWithBumps,
   getTaskQueueForName,
   init,
-  queueTask
+  queueTask,
 } from "@helium/tuktuk-sdk";
 import {
   createAssociatedTokenAccountInstruction,
@@ -15,12 +15,18 @@ import {
   createTransferInstruction,
   getAssociatedTokenAddressSync,
 } from "@solana/spl-token";
-import { Connection, Keypair, LAMPORTS_PER_SOL, SystemProgram, TransactionInstruction } from "@solana/web3.js";
+import {
+  Connection,
+  Keypair,
+  LAMPORTS_PER_SOL,
+  SystemProgram,
+  TransactionInstruction,
+} from "@solana/web3.js";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
-import { initializeTaskQueue, loadKeypair, monitorTask } from "./helpers";
+import { initializeTaskQueue, monitorTask } from "./helpers";
 import { sendInstructions } from "@helium/spl-utils";
-
+import { getKeypairFromFile } from "@solana-developers/helpers";
 
 async function main() {
   const argv = await yargs(hideBin(process.argv))
@@ -45,7 +51,7 @@ async function main() {
     .alias("help", "h").argv;
 
   // Load wallet from file
-  const keypair: Keypair = loadKeypair(argv.walletPath);
+  const keypair: Keypair = await getKeypairFromFile(argv.walletPath);
 
   // Setup connection and provider
   const connection = new Connection(argv.rpcUrl, "confirmed");
@@ -61,7 +67,6 @@ async function main() {
   const program = await init(provider);
   const queueName = argv.queueName;
   const taskQueue = await initializeTaskQueue(program, queueName);
-
 
   // Create a PDA wallet associated with the task queue
   const pdaSeeds = [Buffer.from("test")];
@@ -94,10 +99,14 @@ async function main() {
       toPubkey: pdaWallet,
       lamports: 0.004 * LAMPORTS_PER_SOL,
     }),
-    createAssociatedTokenAccountInstruction(wallet.publicKey, pdaTokenAccount, pdaWallet, mint),
-    createMintToInstruction(mint, pdaTokenAccount, wallet.publicKey, 10)
+    createAssociatedTokenAccountInstruction(
+      wallet.publicKey,
+      pdaTokenAccount,
+      pdaWallet,
+      mint
+    ),
+    createMintToInstruction(mint, pdaTokenAccount, wallet.publicKey, 10),
   ]);
-
 
   // Create instructions for the task
   const instructions: TransactionInstruction[] = [
@@ -118,19 +127,24 @@ async function main() {
 
   // Compile the instructions and PDA into the args expected by the tuktuk program
   console.log("Queueing task...");
-  const { pubkeys: { task }, signature } = await (await queueTask(program, {
-    taskQueue,
-    args: {
-      trigger: { now: {} },
-      crankReward: null,
-      // 0 tasks will run as a result of this task, ie this task does not return any follow on tasks.
-      freeTasks: 0,
-      transaction: {
-        compiledV0: [transaction],
+  const {
+    pubkeys: { task },
+    signature,
+  } = await (
+    await queueTask(program, {
+      taskQueue,
+      args: {
+        trigger: { now: {} },
+        crankReward: null,
+        // 0 tasks will run as a result of this task, ie this task does not return any follow on tasks.
+        freeTasks: 0,
+        transaction: {
+          compiledV0: [transaction],
+        },
+        description: "test token transfer",
       },
-      description: "test token transfer",
-    },
-  }))
+    })
+  )
     .remainingAccounts(remainingAccounts)
     .rpcAndKeys();
   console.log("Task queued! Transaction signature:", signature);
@@ -146,4 +160,4 @@ main()
   .catch((error) => {
     console.error(error);
     process.exit(1);
-  }); 
+  });
