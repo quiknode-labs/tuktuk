@@ -1,14 +1,16 @@
 import { AnchorProvider, Wallet } from "@coral-xyz/anchor";
-import { compileTransaction, init, queueTask } from "@helium/tuktuk-sdk";
 import {
-  Connection,
-  Keypair,
-  PublicKey,
-  TransactionInstruction,
-} from "@solana/web3.js";
-import { initializeTaskQueue, monitorTask, makeMemoInstruction } from "./helpers";
+  compileTransaction,
+  init as initTukTukProgram,
+  queueTask,
+} from "@helium/tuktuk-sdk";
+import { Connection, Keypair } from "@solana/web3.js";
+import {
+  initializeTaskQueue,
+  monitorTask,
+  makeMemoInstruction,
+} from "./helpers";
 import { getKeypairFromFile } from "@solana-developers/helpers";
-
 
 // Configuration variables
 const queueName = "banana-queue";
@@ -30,17 +32,11 @@ console.log("Using wallet:", wallet.publicKey.toBase58());
 console.log("RPC URL:", rpcUrl);
 console.log("Message:", message);
 
-// Initialize TukTuk program
-const program = await init(provider);
+const program = await initTukTukProgram(provider);
 
 const taskQueue = await initializeTaskQueue(program, queueName);
 
-// Create a simple memo instruction
-const memoInstruction = new TransactionInstruction({
-  keys: [],
-  data: Buffer.from(message, "utf-8"),
-  programId: MEMO_PROGRAM_ID,
-});
+const memoInstruction = makeMemoInstruction(message);
 
 console.log("Compiling instructions...");
 const { transaction, remainingAccounts } = compileTransaction(
