@@ -6,10 +6,11 @@ import {
   taskQueueAuthorityKey,
   tuktukConfigKey,
 } from "@helium/tuktuk-sdk";
-import { setTimeout } from "node:timers/promises";
-import { Connection, Keypair, PublicKey } from "@solana/web3.js";
+import { Connection, PublicKey } from "@solana/web3.js";
 
 export const TUKTUK_CONFIG = tuktukConfigKey()[0];
+
+const HOURS = 60 * 60;
 
 export async function initializeTaskQueue(
   program: Program<Tuktuk>,
@@ -26,8 +27,7 @@ export async function initializeTaskQueue(
         minCrankReward: new BN(10000),
         capacity: 10,
         lookupTables: [],
-        // 48 hours
-        staleTaskAge: 60 * 60 * 48,
+        staleTaskAge: 48 * HOURS,
       })
     ).rpcAndKeys();
     taskQueue = taskQueuePubkey;
@@ -55,24 +55,27 @@ export async function initializeTaskQueue(
 }
 
 export async function monitorTask(connection: Connection, task: PublicKey) {
-  let taskAccount;
-  do {
-    try {
-      taskAccount = await connection.getAccountInfo(task);
-      if (!taskAccount) {
-        const signature = await connection.getSignaturesForAddress(task, {
-          limit: 1,
-        });
-        console.log(
-          `Task completed! Transaction signature: ${signature[0].signature}`
-        );
-        break;
+  return new Promise<void>((resolve) => {
+    const interval = setInterval(async () => {
+      try {
+        const taskAccount = await connection.getAccountInfo(task);
+        if (!taskAccount) {
+          const signature = await connection.getSignaturesForAddress(task, {
+            limit: 1,
+          });
+          console.log(
+            `Task completed! Transaction signature: ${signature[0].signature}`
+          );
+          clearInterval(interval);
+          resolve();
+          return;
+        }
+        console.log("Task is still pending...");
+      } catch (error) {
+        console.log("Task completed!");
+        clearInterval(interval);
+        resolve();
       }
-      console.log("Task is still pending...");
-      await setTimeout(2000);
-    } catch (e) {
-      console.log("Task completed!");
-      break;
-    }
-  } while (true);
+    }, 2000);
+  });
 }
