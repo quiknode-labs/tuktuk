@@ -53,23 +53,22 @@ const { transaction, remainingAccounts } = compileTuktukTransaction(
 
 // Queue the task
 console.log("Queueing task...");
+const queueTaskTransaction = await queueTask(program, {
+  taskQueue,
+  args: {
+    trigger: { now: {} },
+    crankReward: null,
+    freeTasks: 0,
+    transaction: {
+      compiledV0: [transaction],
+    },
+    description: `memo: ${message}`,
+  },
+});
 const {
   pubkeys: { task },
   signature,
-} = await (
-  await queueTask(program, {
-    taskQueue,
-    args: {
-      trigger: { now: {} },
-      crankReward: null,
-      freeTasks: 0,
-      transaction: {
-        compiledV0: [transaction],
-      },
-      description: `memo: ${message}`,
-    },
-  })
-)
+} = await queueTaskTransaction
   .remainingAccounts(remainingAccounts)
   .rpcAndKeys();
 

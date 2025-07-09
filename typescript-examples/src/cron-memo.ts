@@ -57,22 +57,21 @@ const taskQueue = await initializeTaskQueue(program, queueName);
 let cronJob = await getCronJobForName(cronProgram, cronName);
 if (!cronJob) {
   console.log("Creating new cron job...");
+  const createCronJobTransaction = await createCronJob(cronProgram, {
+    tuktukProgram: program,
+    taskQueue,
+    args: {
+      name: cronName,
+      schedule: "0 * * * * *", // Run every minute
+      // The memo transaction doesn't need to schedule more transactions, so we set this to 0
+      freeTasksPerTransaction: 0,
+      // We just have one transaction to queue for each cron job, so we set this to 1
+      numTasksPerQueueCall: 1,
+    },
+  });
   const {
     pubkeys: { cronJob: cronJobPubkey },
-  } = await (
-    await createCronJob(cronProgram, {
-      tuktukProgram: program,
-      taskQueue,
-      args: {
-        name: cronName,
-        schedule: "0 * * * * *", // Run every minute
-        // The memo transaction doesn't need to schedule more transactions, so we set this to 0
-        freeTasksPerTransaction: 0,
-        // We just have one transaction to queue for each cron job, so we set this to 1
-        numTasksPerQueueCall: 1,
-      },
-    })
-  ).rpcAndKeys({ skipPreflight: true });
+  } = await createCronJobTransaction.rpcAndKeys({ skipPreflight: true });
   cronJob = cronJobPubkey;
   console.log("Funding cron job with", fundingAmount / LAMPORTS_PER_SOL, "SOL");
   await sendInstructions(provider, [
