@@ -25,16 +25,16 @@
     "types": "./lib/types/src/index.d.ts"
   },
   "scripts": {
-    "memo": "ts-node src/memo.ts",
-    "cron-memo": "ts-node src/cron-memo.ts",
-    "token-transfer": "ts-node src/token-transfer.ts",
+    "memo": "npx tsx src/memo.ts",
+    "cron-memo": "npx tsx src/cron-memo.ts",
+    "token-transfer": "npx tsx src/token-transfer.ts",
     "build": "tsc",
     "lint": "eslint . --ext .ts",
     "format": "prettier --write \"src/**/*.ts\"",
     "precommit": "npx git-format-staged -f 'prettier --ignore-unknown --stdin --stdin-filepath \"{}\"' .",
     "start": "node lib/esm/index.js",
-    "dev": "npx ts-node --project tsconfig.cjs.json src/index.ts",
-    "seed-db": "npx ts-node --project tsconfig.cjs.json src/seed-db.ts"
+    "dev": "npx tsx --project tsconfig.cjs.json src/index.ts",
+    "seed-db": "npx tsx --project tsconfig.cjs.json src/seed-db.ts"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.31.0",
@@ -49,15 +49,17 @@
     "yargs": "^17.7.2"
   },
   "devDependencies": {
+    "@types/bn.js": "^5.2.0",
     "@types/node": "^20.11.24",
     "@types/yargs": "^17.0.32",
     "@typescript-eslint/eslint-plugin": "^7.1.0",
     "@typescript-eslint/parser": "^7.1.0",
     "eslint": "^8.57.0",
     "prettier": "^3.2.5",
-    "ts-node": "^10.9.2",
+    "tsx": "^4.20.3",
     "typescript": "^5.3.3"
   },
   "keywords": [],
-  "author": ""
+  "author": "",
+  "type": "module"
 }

@@ -1,4 +1,5 @@
-import { BN, Program } from "@coral-xyz/anchor";
+import { Program } from "@coral-xyz/anchor";
+import { BN } from "bn.js";
 import { Tuktuk } from "@helium/tuktuk-idls/lib/types/tuktuk";
 import {
   createTaskQueue,
