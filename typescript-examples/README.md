@@ -3,6 +3,7 @@
 This directory contains TypeScript examples showing how to use the TukTuk SDK.
 
 ## Table of Contents
+
 - [Prerequisites](#prerequisites)
 - [Setup](#setup)
 - [Examples](#examples)
@@ -19,16 +20,19 @@ This directory contains TypeScript examples showing how to use the TukTuk SDK.
 ## Setup
 
 1. Install dependencies:
+
 ```bash
 yarn install
 ```
 
 2. Create a Solana wallet for testing if you don't have one:
+
 ```bash
 solana-keygen new --outfile ./wallet.json
 ```
 
 3. Get some devnet SOL:
+
 ```bash
 solana airdrop 2 $(solana address -k ./wallet.json) --url devnet
 ```
@@ -54,11 +58,13 @@ yarn memo -- \
 ```
 
 Required Parameters:
+
 - `--queueName`: Name of the task queue (one will be created if it doesn't exist. NOTE: This will cost 1 sol to create. You can recover this by deleting the queue using the tuktuk-cli)
 - `--walletPath`: Path to your Solana wallet keypair file
 - `--rpcUrl`: Solana RPC URL (e.g., https://api.devnet.solana.com)
 
 Optional Parameters:
+
 - `--message`: Message to write in the memo (default: "Hello World!")
 
 ### Scheduled Memo Task (Cron)
@@ -82,16 +88,19 @@ yarn cron-memo -- \
 ```
 
 Required Parameters:
+
 - `--cronName`: Name of the cron job (must be unique)
 - `--queueName`: Name of the task queue to use (one will be created if it doesn't exist)
 - `--walletPath`: Path to your Solana wallet keypair file
 - `--rpcUrl`: Solana RPC URL (e.g., https://api.devnet.solana.com)
 
 Optional Parameters:
+
 - `--message`: Message to write in the memo (default: "Hello World!")
 - `--fundingAmount`: Amount of SOL to fund the cron job with in lamports (default: 1 SOL)
 
 To stop the cron job:
+
 ```bash
 tuktuk cron close --cron-name my-cron
 ```
@@ -99,6 +108,7 @@ tuktuk cron close --cron-name my-cron
 ### Token Transfer Task
 
 The `src/token-transfer.ts` example demonstrates how to:
+
 1. Create a custom PDA wallet for a task queue
 2. Create a test SPL token
 3. Queue a task to transfer tokens from the PDA to another wallet
@@ -117,14 +127,15 @@ yarn token-transfer -- \
 ```
 
 Required Parameters:
+
 - `--queueName`: Name of the task queue (one will be created if it doesn't exist. NOTE: This will cost 1 sol to create. You can recover this by deleting the queue using the tuktuk-cli)
 - `--walletPath`: Path to your Solana wallet keypair file
 - `--rpcUrl`: Solana RPC URL (e.g., https://api.devnet.solana.com)
 
 This will:
+
 1. Create a new task queue if it doesn't exist
 2. Create a test SPL token mint
 3. Create token accounts and mint some tokens
 4. Queue a task to transfer the tokens
 5. Monitor the task status
-
