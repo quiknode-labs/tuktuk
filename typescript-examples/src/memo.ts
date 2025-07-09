@@ -1,16 +1,20 @@
 import { AnchorProvider, Wallet } from "@coral-xyz/anchor";
+import { compileTransaction, init, queueTask } from "@helium/tuktuk-sdk";
 import {
-  compileTransaction,
-  init,
-  queueTask
-} from "@helium/tuktuk-sdk";
-import { Connection, Keypair, PublicKey, TransactionInstruction } from "@solana/web3.js";
+  Connection,
+  Keypair,
+  PublicKey,
+  TransactionInstruction,
+} from "@solana/web3.js";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
-import { initializeTaskQueue, loadKeypair, monitorTask } from "./helpers";
+import { initializeTaskQueue, monitorTask } from "./helpers";
+import { getKeypairFromFile } from "@solana-developers/helpers";
 
 // Solana Memo Program ID
-const MEMO_PROGRAM_ID = new PublicKey("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr");
+const MEMO_PROGRAM_ID = new PublicKey(
+  "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"
+);
 
 async function main() {
   const argv = await yargs(hideBin(process.argv))
@@ -40,7 +44,7 @@ async function main() {
     .alias("help", "h").argv;
 
   // Load wallet from file
-  const keypair: Keypair = loadKeypair(argv.walletPath);
+  const keypair: Keypair = await getKeypairFromFile(argv.walletPath);
 
   // Setup connection and provider
   const connection = new Connection(argv.rpcUrl, "confirmed");
@@ -56,7 +60,7 @@ async function main() {
   // Initialize TukTuk program
   const program = await init(provider);
   const queueName = argv.queueName;
-  
+
   const taskQueue = await initializeTaskQueue(program, queueName);
 
   // Create a simple memo instruction
@@ -74,18 +78,23 @@ async function main() {
 
   // Queue the task
   console.log("Queueing task...");
-  const { pubkeys: { task }, signature } = await (await queueTask(program, {
-    taskQueue,
-    args: {
-      trigger: { now: {} },
-      crankReward: null,
-      freeTasks: 0,
-      transaction: {
-        compiledV0: [transaction],
+  const {
+    pubkeys: { task },
+    signature,
+  } = await (
+    await queueTask(program, {
+      taskQueue,
+      args: {
+        trigger: { now: {} },
+        crankReward: null,
+        freeTasks: 0,
+        transaction: {
+          compiledV0: [transaction],
+        },
+        description: `memo: ${argv.message}`,
       },
-      description: `memo: ${argv.message}`,
-    },
-  }))
+    })
+  )
     .remainingAccounts(remainingAccounts)
     .rpcAndKeys();
 
@@ -102,4 +111,4 @@ main()
   .catch((error) => {
     console.error(error);
     process.exit(1);
-  }); 
+  });
