@@ -60,5 +60,8 @@
   },
   "keywords": [],
   "author": "",
-  "type": "module"
+  "type": "module",
+  "overrides": {
+    "eventemitter3": "^5.0.1"
+  }
 }
