@@ -6,7 +6,7 @@ import {
   taskQueueAuthorityKey,
   tuktukConfigKey,
 } from "@helium/tuktuk-sdk";
-
+import { setTimeout } from "node:timers/promises";
 import { Connection, Keypair, PublicKey } from "@solana/web3.js";
 
 export const TUKTUK_CONFIG = tuktukConfigKey()[0];
@@ -69,7 +69,7 @@ export async function monitorTask(connection: Connection, task: PublicKey) {
         break;
       }
       console.log("Task is still pending...");
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      await setTimeout(2000);
     } catch (e) {
       console.log("Task completed!");
       break;
