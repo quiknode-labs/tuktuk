@@ -1,6 +1,6 @@
 import { AnchorProvider, Wallet } from "@coral-xyz/anchor";
 import {
-  compileTransaction,
+  compileTransaction as compileTuktukTransaction,
   init as initTukTukProgram,
   queueTask,
 } from "@helium/tuktuk-sdk";
@@ -46,7 +46,7 @@ const taskQueue = await initializeTaskQueue(program, queueName);
 const memoInstruction = makeMemoInstruction(message);
 
 console.log("Compiling instructions...");
-const { transaction, remainingAccounts } = compileTransaction(
+const { transaction, remainingAccounts } = compileTuktukTransaction(
   [memoInstruction],
   []
 );

@@ -55,37 +55,17 @@ The `src/cron-memo.ts` example shows how to schedule a memo task to run on a reg
 
 To run the example:
 
-```bash
+````bash
 # Show help and available options
-npm run cron-memo -- --help
+npm run cron-memo
 
-# Run with specific parameters
-npm run cron-memo -- \
-  --cronName my-cron \
-  --queueName my-queue \
-  --walletPath ./wallet.json \
-  --rpcUrl https://api.devnet.solana.com \
-  --message "Hello from cron!" \
-  --fundingAmount 1000000000
-```
+### To stop the cron job
 
-Required Parameters:
-
-- `--cronName`: Name of the cron job (must be unique)
-- `--queueName`: Name of the task queue to use (one will be created if it doesn't exist)
-- `--walletPath`: Path to your Solana wallet keypair file
-- `--rpcUrl`: Solana RPC URL (e.g., https://api.devnet.solana.com)
-
-Optional Parameters:
-
-- `--message`: Message to write in the memo (default: "Hello World!")
-- `--fundingAmount`: Amount of SOL to fund the cron job with in lamports (default: 1 SOL)
-
-To stop the cron job:
+Run:
 
 ```bash
 tuktuk cron close --cron-name my-cron
-```
+````
 
 ### Token Transfer Task
 
