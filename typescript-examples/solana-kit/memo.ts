@@ -2,17 +2,19 @@ import { type Address } from "@solana/kit";
 import { connect, type Connection } from "solana-kite";
 import { AnchorProvider, Wallet } from "@coral-xyz/anchor";
 import {
+  getAddQueueAuthorityV0Instruction,
+  fetchMaybeTaskQueueAuthorityV0,
+  TUKTUK_PROGRAM_ADDRESS,
+} from "./dist/js-client/index.js";
+
+// TODO: These imports all need to be removed in favor of solana-kit, codama and solana-kite
+import {
   compileTransaction as compileTuktukTransaction,
   init as initTukTukProgram,
   queueTask,
 } from "@helium/tuktuk-sdk";
 import { Connection as Web3Connection, Keypair, PublicKey, TransactionInstruction } from "@solana/web3.js";
 import { getKeypairFromFile } from "@solana-developers/helpers";
-import {
-  getAddQueueAuthorityV0Instruction,
-  fetchMaybeTaskQueueAuthorityV0,
-  TUKTUK_PROGRAM_ADDRESS,
-} from "./dist/js-client/index.js";
 
 // Name of the task queue (one will be created if it doesn't exist).
 // NOTE: This will cost 1 sol to create. You can recover this by deleting the queue using the tuktuk-cli
@@ -51,7 +53,8 @@ const makeMemoInstruction = (message: string): TransactionInstruction => {
   });
 };
 
-const initializeTaskQueue = async (name: string): Promise<Address> => {
+// Previously called initializeTaskQueue - renamed for clarity
+const getTaskQueueAddressFromName = async (name: string): Promise<Address> => {
   console.log("🔍 Looking for task queue with name:", name);
 
   // Use the same task queue address that the web3js-legacy version found
@@ -125,7 +128,7 @@ const monitorTask = async (connection: Connection, task: Address): Promise<void>
 console.log("Using wallet:", keypair.address);
 console.log("Message:", message);
 
-const taskQueue = await initializeTaskQueue(queueName);
+const taskQueue = await getTaskQueueAddressFromName(queueName);
 
 const memoInstruction = makeMemoInstruction(message);
 
