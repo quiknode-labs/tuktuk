@@ -1,5 +1,5 @@
-import { type Address } from '@solana/kit';
-import { connect, type Connection } from 'solana-kite';
+import { type Address } from "@solana/kit";
+import { connect, type Connection } from "solana-kite";
 import { AnchorProvider, Wallet } from "@coral-xyz/anchor";
 import {
   compileTransaction as compileTuktukTransaction,
@@ -12,9 +12,7 @@ import {
   getAddQueueAuthorityV0Instruction,
   fetchMaybeTaskQueueAuthorityV0,
   TUKTUK_PROGRAM_ADDRESS,
-} from './dist/js-client/index.js';
-
-
+} from "./dist/js-client/index.js";
 
 // Name of the task queue (one will be created if it doesn't exist).
 // NOTE: This will cost 1 sol to create. You can recover this by deleting the queue using the tuktuk-cli
@@ -27,10 +25,10 @@ const walletPath = "/Users/mike/.config/solana/id.json";
 const message = "Hello TukTuk!";
 
 // Solana Memo Program ID
-const MEMO_PROGRAM_ID = 'MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr' as Address;
+const MEMO_PROGRAM_ID = "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr" as Address;
 
 // Setup connections - both solana-kite and web3.js for hybrid approach
-const connection = connect('devnet');
+const connection = connect("devnet");
 const keypair = await connection.loadWalletFromFile(walletPath);
 
 // Setup web3.js connection and provider for TukTuk SDK
@@ -58,16 +56,14 @@ const initializeTaskQueue = async (name: string): Promise<Address> => {
 
   // Use the same task queue address that the web3js-legacy version found
   // This is the existing task queue for "banana-queue" on devnet
-  const taskQueue = 'J2ZSdHjoGdbwcPuP2gXk5LCrRwBpvc2vK4AGX49J3JdJ' as Address;
+  const taskQueue = "J2ZSdHjoGdbwcPuP2gXk5LCrRwBpvc2vK4AGX49J3JdJ" as Address;
   console.log("🔍 Using existing task queue:", taskQueue);
 
   // Check if queue authority exists for our wallet
   console.log("🔍 Checking queue authority...");
-  const taskQueueAuthority = (await connection.getPDAAndBump(TUKTUK_PROGRAM_ADDRESS, [
-    'task_queue_authority',
-    taskQueue,
-    keypair.address
-  ])).pda;
+  const taskQueueAuthority = (
+    await connection.getPDAAndBump(TUKTUK_PROGRAM_ADDRESS, ["task_queue_authority", taskQueue, keypair.address])
+  ).pda;
   console.log("🔍 Queue authority PDA:", taskQueueAuthority);
 
   const queueAuthorityAccount = await fetchMaybeTaskQueueAuthorityV0(connection.rpc, taskQueueAuthority);
@@ -98,7 +94,7 @@ const initializeTaskQueue = async (name: string): Promise<Address> => {
 
   console.log("✅ Task queue ready:", taskQueue);
   return taskQueue;
-}
+};
 
 // Use the TukTuk SDK's compileTransaction function directly
 // This is the working approach from the hybrid test
@@ -134,10 +130,7 @@ const taskQueue = await initializeTaskQueue(queueName);
 const memoInstruction = makeMemoInstruction(message);
 
 console.log("Compiling instructions...");
-const { transaction, remainingAccounts } = compileTuktukTransaction(
-  [memoInstruction],
-  []
-);
+const { transaction, remainingAccounts } = compileTuktukTransaction([memoInstruction], []);
 
 // Queue the task
 console.log("Queueing task...");
@@ -175,9 +168,7 @@ const queueTaskTransaction = await queueTask(program, {
 const {
   pubkeys: { task },
   signature,
-} = await queueTaskTransaction
-  .remainingAccounts(remainingAccounts)
-  .rpcAndKeys();
+} = await queueTaskTransaction.remainingAccounts(remainingAccounts).rpcAndKeys();
 
 console.log("Task queued! Transaction signature:", signature);
 console.log("Task address:", task.toBase58());
