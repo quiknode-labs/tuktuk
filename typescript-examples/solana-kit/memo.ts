@@ -34,11 +34,8 @@ const provider = new AnchorProvider(web3Connection, wallet, {
 // Initialize TukTuk program
 const program = await initTukTukProgram(provider);
 
-// Compile instructions into a TukTuk transaction
-const compileTuktukTransactionNew = (
-  instructions: Array<Instruction>,
-  signersSeedsBytes: Array<Array<Buffer>> = [],
-) => {
+// Compile instructions into a TukTuk V0 compiled transaction
+const compileTuktukTransaction = (instructions: Array<Instruction>, signersSeedsBytes: Array<Array<Buffer>> = []) => {
   // Collect all unique accounts
   const accountSet = new Set<string>();
   const accountMetas: Array<{ pubkey: PublicKey; isSigner: boolean; isWritable: boolean }> = [];
@@ -142,7 +139,7 @@ const taskQueue = await getTaskQueueAddressFromName(connection, keypair, queueNa
 const memoInstruction = getAddMemoInstruction({ memo: message });
 
 console.log("Compiling instructions into a TukTuk transaction...");
-const { transaction, remainingAccounts } = compileTuktukTransactionNew([memoInstruction], []);
+const { transaction, remainingAccounts } = compileTuktukTransaction([memoInstruction], []);
 
 // Queue the task
 console.log("Queueing task...");
