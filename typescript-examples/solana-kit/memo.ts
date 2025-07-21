@@ -1,15 +1,12 @@
-import { type Address } from "@solana/kit";
+import { type Address, type Instruction, AccountRole } from "@solana/kit";
 import { connect, type Connection } from "solana-kite";
 import { AnchorProvider, Wallet } from "@coral-xyz/anchor";
 import { getTaskQueueAddressFromName } from "./helpers.js";
+import { getAddMemoInstruction } from "@solana-program/memo";
 
 // TODO: These imports all need to be removed in favor of solana-kit, codama and solana-kite
-import {
-  compileTransaction as compileTuktukTransaction,
-  init as initTukTukProgram,
-  queueTask,
-} from "@helium/tuktuk-sdk";
-import { Connection as Web3Connection, Keypair, PublicKey, TransactionInstruction } from "@solana/web3.js";
+import { init as initTukTukProgram, queueTask } from "@helium/tuktuk-sdk";
+import { Connection as Web3Connection, PublicKey } from "@solana/web3.js";
 import { getKeypairFromFile } from "@solana-developers/helpers";
 
 // Name of the task queue (one will be created if it doesn't exist).
@@ -21,9 +18,6 @@ const walletPath = "/Users/mike/.config/solana/id.json";
 
 // Message to write in the memo
 const message = "Hello TukTuk!";
-
-// Solana Memo Program ID
-const MEMO_PROGRAM_ID = "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr" as Address;
 
 // Setup connections - both solana-kite and web3.js for hybrid approach
 const connection = connect("devnet");
@@ -40,19 +34,84 @@ const provider = new AnchorProvider(web3Connection, wallet, {
 // Initialize TukTuk program
 const program = await initTukTukProgram(provider);
 
-// Helper function for memo instruction (web3.js format for TukTuk SDK)
-const makeMemoInstruction = (message: string): TransactionInstruction => {
-  return new TransactionInstruction({
-    keys: [],
-    data: Buffer.from(message, "utf-8"),
-    programId: new PublicKey(MEMO_PROGRAM_ID),
+// Compile instructions into a TukTuk transaction
+const compileTuktukTransactionNew = (
+  instructions: Array<Instruction>,
+  signersSeedsBytes: Array<Array<Buffer>> = [],
+) => {
+  // Collect all unique accounts
+  const accountSet = new Set<string>();
+  const accountMetas: Array<{ pubkey: PublicKey; isSigner: boolean; isWritable: boolean }> = [];
+
+  // Add all accounts from instructions
+  for (const instruction of instructions) {
+    if (instruction.accounts) {
+      for (const account of instruction.accounts) {
+        if (!accountSet.has(account.address)) {
+          accountSet.add(account.address);
+          accountMetas.push({
+            pubkey: new PublicKey(account.address),
+            isSigner: account.role === AccountRole.READONLY_SIGNER || account.role === AccountRole.WRITABLE_SIGNER,
+            isWritable: account.role === AccountRole.WRITABLE || account.role === AccountRole.WRITABLE_SIGNER,
+          });
+        }
+      }
+    }
+    // Add program ID
+    if (!accountSet.has(instruction.programAddress)) {
+      accountSet.add(instruction.programAddress);
+      accountMetas.push({
+        pubkey: new PublicKey(instruction.programAddress),
+        isSigner: false,
+        isWritable: false,
+      });
+    }
+  }
+
+  // Sort accounts: signers first, then writable, then readonly
+  accountMetas.sort((a, b) => {
+    if (a.isSigner !== b.isSigner) return b.isSigner ? 1 : -1;
+    if (a.isWritable !== b.isWritable) return b.isWritable ? 1 : -1;
+    return 0;
   });
+
+  const accounts = accountMetas.map((meta) => meta.pubkey);
+  const accountMap = new Map(accounts.map((key, index) => [key.toBase58(), index]));
+
+  // Count account types
+  const numRwSigners = accountMetas.filter((m) => m.isSigner && m.isWritable).length;
+  const numRoSigners = accountMetas.filter((m) => m.isSigner && !m.isWritable).length;
+  const numRw = accountMetas.filter((m) => !m.isSigner && m.isWritable).length;
+
+  // Compile instructions
+  const compiledInstructions = instructions.map((instruction) => {
+    const programIdIndex = accountMap.get(instruction.programAddress)!;
+    const accountIndices = instruction.accounts?.map((account) => accountMap.get(account.address)!) || [];
+
+    return {
+      programIdIndex,
+      accounts: Buffer.from(accountIndices),
+      data: Buffer.from(instruction.data || []),
+    };
+  });
+
+  const transaction = {
+    numRwSigners,
+    numRoSigners,
+    numRw,
+    accounts,
+    instructions: compiledInstructions,
+    signerSeeds: signersSeedsBytes,
+  };
+
+  const remainingAccounts = accountMetas.map((meta) => ({
+    pubkey: meta.pubkey,
+    isSigner: meta.isSigner,
+    isWritable: meta.isWritable,
+  }));
+
+  return { transaction, remainingAccounts };
 };
-
-// Use the TukTuk SDK's compileTransaction function directly
-// This is the working approach from the hybrid test
-
-// Use the TukTuk SDK's queueTask function - this is the working approach
 
 const monitorTask = async (connection: Connection, task: Address): Promise<void> => {
   return new Promise<void>((resolve) => {
@@ -80,10 +139,10 @@ console.log("Message:", message);
 
 const taskQueue = await getTaskQueueAddressFromName(connection, keypair, queueName);
 
-const memoInstruction = makeMemoInstruction(message);
+const memoInstruction = getAddMemoInstruction({ memo: message });
 
-console.log("Compiling instructions...");
-const { transaction, remainingAccounts } = compileTuktukTransaction([memoInstruction], []);
+console.log("Compiling instructions into a TukTuk transaction...");
+const { transaction, remainingAccounts } = compileTuktukTransactionNew([memoInstruction], []);
 
 // Queue the task
 console.log("Queueing task...");
