@@ -8,6 +8,10 @@ import {
   getTaskQueueNameMappingV0Decoder,
   getQueueTaskV0InstructionAsync,
 } from "./dist/tuktuk-js-client/index.js";
+import {
+  CRON_PROGRAM_ADDRESS,
+  fetchMaybeCronJobNameMappingV0,
+} from "./dist/cron-js-client/index.js";
 import { taskKey } from "@helium/tuktuk-sdk";
 
 // Previously called initializeTaskQueue - renamed for clarity
@@ -265,7 +269,7 @@ export const compileTuktukTransaction = (
     return 0;
   });
 
-  const accounts = accountMetas.map((meta) => meta.address);
+  const accounts = accountMetas.map((meta) => meta.address as Address);
   const accountMap = new Map(accounts.map((address, index) => [address, index]));
 
   // Count account types
@@ -317,3 +321,48 @@ export const monitorTask = async (connection: Connection, task: Address): Promis
     }, 2000);
   });
 };
+
+// Cron SDK functions - simplified implementations
+export const getCronJobForName = async (connection: Connection, cronName: string): Promise<Address | null> => {
+  const keypair = await connection.loadWalletFromFile("/Users/mike/.config/solana/id.json");
+  
+  // Use WebCrypto API for SHA256 hash (returns 32 bytes)
+  const encoder = new TextEncoder();
+  const data = encoder.encode(cronName);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  
+  // Use only first 16 bytes of hash to fit within 32-byte seed limit
+  const hashBytes = new Uint8Array(hashBuffer).slice(0, 16);
+  const hashHex = Array.from(hashBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+  
+  // Derive name mapping PDA exactly like the original SDK
+  try {
+    const nameMapping = await connection.getPDAAndBump(CRON_PROGRAM_ADDRESS, [
+      "cron_job_name_mapping",
+      keypair.address,
+      hashHex,
+    ]);
+    
+    // Fetch the name mapping account
+    const cronJobNameMapping = await fetchMaybeCronJobNameMappingV0(connection.rpc, nameMapping.pda);
+    
+    if (!cronJobNameMapping.exists) {
+      return null;
+    }
+    
+    // Return the cronJob address stored in the name mapping
+    return cronJobNameMapping.data.cronJob;
+  } catch (error) {
+    console.error("Error fetching cron job for name:", cronName, error);
+    return null;
+  }
+};
+
+// export async function getCronJobForName(program: Program<Cron>, name: string): Promise<PublicKey | null> {
+//     const nameMapping = cronJobNameMappingKey(program.provider.wallet!.publicKey, name)[0];
+//     const cronJobNameMapping = await program.account.cronJobNameMappingV0.fetchNullable(nameMapping);
+//     if (!cronJobNameMapping) {
+//       return null;
+//     }
+//     return cronJobNameMapping.cronJob;
+//   }
