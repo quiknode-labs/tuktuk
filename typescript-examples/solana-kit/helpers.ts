@@ -7,7 +7,7 @@ import {
   TASK_QUEUE_NAME_MAPPING_V0_DISCRIMINATOR,
   getTaskQueueNameMappingV0Decoder,
   getQueueTaskV0InstructionAsync,
-} from "./dist/js-client/index.js";
+} from "./dist/tuktuk-js-client/index.js";
 import { taskKey } from "@helium/tuktuk-sdk";
 
 // Previously called initializeTaskQueue - renamed for clarity
@@ -106,7 +106,8 @@ export const getTaskQueueAddressFromName = async (
 const nextAvailableTaskId = (taskBitmap: Uint8Array): number | null => {
   for (let byteIdx = 0; byteIdx < taskBitmap.length; byteIdx++) {
     const byte = taskBitmap[byteIdx];
-    if (byte !== 0xff) { // If byte is not all 1s
+    if (byte !== 0xff) {
+      // If byte is not all 1s
       for (let bitIdx = 0; bitIdx < 8; bitIdx++) {
         if ((byte & (1 << bitIdx)) === 0) {
           return byteIdx * 8 + bitIdx;
@@ -135,10 +136,19 @@ const TASK_QUEUE_V0_OFFSETS = {
 
 // Parse TaskQueueV0 account data to extract task bitmap
 const parseTaskQueueV0 = (accountData: Uint8Array) => {
-  const capacity = new DataView(accountData.buffer, accountData.byteOffset).getUint16(TASK_QUEUE_V0_OFFSETS.CAPACITY, true);
-  const bitmapLen = new DataView(accountData.buffer, accountData.byteOffset).getUint32(TASK_QUEUE_V0_OFFSETS.TASK_BITMAP_LEN, true);
-  const taskBitmap = accountData.slice(TASK_QUEUE_V0_OFFSETS.TASK_BITMAP, TASK_QUEUE_V0_OFFSETS.TASK_BITMAP + bitmapLen);
-  
+  const capacity = new DataView(accountData.buffer, accountData.byteOffset).getUint16(
+    TASK_QUEUE_V0_OFFSETS.CAPACITY,
+    true,
+  );
+  const bitmapLen = new DataView(accountData.buffer, accountData.byteOffset).getUint32(
+    TASK_QUEUE_V0_OFFSETS.TASK_BITMAP_LEN,
+    true,
+  );
+  const taskBitmap = accountData.slice(
+    TASK_QUEUE_V0_OFFSETS.TASK_BITMAP,
+    TASK_QUEUE_V0_OFFSETS.TASK_BITMAP + bitmapLen,
+  );
+
   return { capacity, taskBitmap };
 };
 
@@ -148,29 +158,31 @@ export const queueTask = async (
   signer: TransactionSigner,
   taskQueue: Address,
   args: {
-    trigger: { __kind: 'Now' } | { __kind: 'Timestamp', fields: [bigint] };
-    transaction: { __kind: 'CompiledV0', fields: [any] };
+    trigger: { __kind: "Now" } | { __kind: "Timestamp"; fields: [bigint] };
+    transaction: { __kind: "CompiledV0"; fields: [any] };
     crankReward: bigint | null;
     freeTasks: number;
     description: string;
-  }
+  },
 ) => {
   // 1. Fetch task queue account to get task bitmap
-  const taskQueueAccount = await connection.rpc.getAccountInfo(taskQueue, {
-    encoding: 'base64'
-  }).send();
+  const taskQueueAccount = await connection.rpc
+    .getAccountInfo(taskQueue, {
+      encoding: "base64",
+    })
+    .send();
   if (!taskQueueAccount.value) {
-    throw new Error('Task queue account not found');
+    throw new Error("Task queue account not found");
   }
 
   // 2. Parse task bitmap and find available task ID
   let accountData: Uint8Array;
   if (Array.isArray(taskQueueAccount.value.data) && taskQueueAccount.value.data.length === 2) {
     // Account data is [Base64EncodedBytes, "base64"] format
-    accountData = new Uint8Array(Buffer.from(taskQueueAccount.value.data[0] as string, 'base64'));
-  } else if (typeof taskQueueAccount.value.data === 'string') {
+    accountData = new Uint8Array(Buffer.from(taskQueueAccount.value.data[0] as string, "base64"));
+  } else if (typeof taskQueueAccount.value.data === "string") {
     // Account data is base64 encoded string
-    accountData = new Uint8Array(Buffer.from(taskQueueAccount.value.data, 'base64'));
+    accountData = new Uint8Array(Buffer.from(taskQueueAccount.value.data, "base64"));
   } else {
     // Already a Uint8Array or other format
     accountData = new Uint8Array(taskQueueAccount.value.data as any);
@@ -179,7 +191,7 @@ export const queueTask = async (
   const { taskBitmap } = parseTaskQueueV0(accountData);
   const taskId = nextAvailableTaskId(taskBitmap);
   if (taskId === null) {
-    throw new Error('No available task slots in queue');
+    throw new Error("No available task slots in queue");
   }
 
   // 3. Derive task PDA using the imported taskKey function
@@ -213,7 +225,10 @@ export const queueTask = async (
 };
 
 // Compile instructions into a TukTuk V0 compiled transaction
-export const compileTuktukTransaction = (instructions: Array<Instruction>, signersSeedsBytes: Array<Array<Buffer>> = []) => {
+export const compileTuktukTransaction = (
+  instructions: Array<Instruction>,
+  signersSeedsBytes: Array<Array<Buffer>> = [],
+) => {
   // Collect all unique accounts
   const accountSet = new Set<string>();
   const accountMetas: Array<{ address: string; isSigner: boolean; isWritable: boolean }> = [];
