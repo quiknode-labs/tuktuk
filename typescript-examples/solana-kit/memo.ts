@@ -1,13 +1,11 @@
-import { type Address, type Instruction, AccountRole } from "@solana/kit";
+import { type Address, type Instruction, AccountRole, type TransactionSigner } from "@solana/kit";
 import { connect, type Connection } from "solana-kite";
-import { AnchorProvider, Wallet } from "@coral-xyz/anchor";
 import { getTaskQueueAddressFromName } from "./helpers.js";
 import { getAddMemoInstruction } from "@solana-program/memo";
+import { getQueueTaskV0InstructionAsync } from "./dist/js-client/index.js";
 
-// TODO: These imports all need to be removed in favor of solana-kit, codama and solana-kite
-import { init as initTukTukProgram, queueTask } from "@helium/tuktuk-sdk";
-import { Connection as Web3Connection, PublicKey } from "@solana/web3.js";
-import { getKeypairFromFile } from "@solana-developers/helpers";
+// Minimal imports needed for PDA derivation only
+import { taskKey } from "@helium/tuktuk-sdk";
 
 // Name of the task queue (one will be created if it doesn't exist).
 // NOTE: This will cost 1 sol to create. You can recover this by deleting the queue using the tuktuk-cli
@@ -19,26 +17,125 @@ const walletPath = "/Users/mike/.config/solana/id.json";
 // Message to write in the memo
 const message = "Hello TukTuk!";
 
-// Setup connections - both solana-kite and web3.js for hybrid approach
+// Setup connection using solana-kite
 const connection = connect("devnet");
 const keypair = await connection.loadWalletFromFile(walletPath);
 
-// Setup web3.js connection and provider for TukTuk SDK
-const web3Connection = new Web3Connection("https://api.devnet.solana.com", "confirmed");
-const web3Keypair = await getKeypairFromFile(walletPath);
-const wallet = new Wallet(web3Keypair);
-const provider = new AnchorProvider(web3Connection, wallet, {
-  commitment: "confirmed",
-});
+// Helper function to find next available task ID from bitmap
+const nextAvailableTaskId = (taskBitmap: Uint8Array): number | null => {
+  for (let byteIdx = 0; byteIdx < taskBitmap.length; byteIdx++) {
+    const byte = taskBitmap[byteIdx];
+    if (byte !== 0xff) { // If byte is not all 1s
+      for (let bitIdx = 0; bitIdx < 8; bitIdx++) {
+        if ((byte & (1 << bitIdx)) === 0) {
+          return byteIdx * 8 + bitIdx;
+        }
+      }
+    }
+  }
+  return null;
+};
 
-// Initialize TukTuk program
-const program = await initTukTukProgram(provider);
+// TaskQueueV0 account structure offsets (based on Rust struct)
+const TASK_QUEUE_V0_OFFSETS = {
+  TUKTUK_CONFIG: 8, // Skip discriminator
+  ID: 40,
+  UPDATE_AUTHORITY: 44,
+  RESERVED: 76,
+  MIN_CRANK_REWARD: 108,
+  UNCOLLECTED_PROTOCOL_FEES: 116,
+  CAPACITY: 124,
+  CREATED_AT: 126,
+  UPDATED_AT: 134,
+  BUMP_SEED: 142,
+  TASK_BITMAP_LEN: 143, // u32 length prefix for Vec<u8>
+  TASK_BITMAP: 147, // Start of bitmap data
+};
+
+// Parse TaskQueueV0 account data to extract task bitmap
+const parseTaskQueueV0 = (accountData: Uint8Array) => {
+  const capacity = new DataView(accountData.buffer, accountData.byteOffset).getUint16(TASK_QUEUE_V0_OFFSETS.CAPACITY, true);
+  const bitmapLen = new DataView(accountData.buffer, accountData.byteOffset).getUint32(TASK_QUEUE_V0_OFFSETS.TASK_BITMAP_LEN, true);
+  const taskBitmap = accountData.slice(TASK_QUEUE_V0_OFFSETS.TASK_BITMAP, TASK_QUEUE_V0_OFFSETS.TASK_BITMAP + bitmapLen);
+  
+  return { capacity, taskBitmap };
+};
+
+// Modern queueTask replacement using Solana Kit/Kite/Codama
+const queueTaskModern = async (
+  connection: Connection,
+  signer: TransactionSigner,
+  taskQueue: Address,
+  args: {
+    trigger: { __kind: 'Now' } | { __kind: 'Timestamp', fields: [bigint] };
+    transaction: { __kind: 'CompiledV0', fields: [any] };
+    crankReward: bigint | null;
+    freeTasks: number;
+    description: string;
+  }
+) => {
+  // 1. Fetch task queue account to get task bitmap
+  const taskQueueAccount = await connection.rpc.getAccountInfo(taskQueue, {
+    encoding: 'base64'
+  }).send();
+  if (!taskQueueAccount.value) {
+    throw new Error('Task queue account not found');
+  }
+
+  // 2. Parse task bitmap and find available task ID
+  let accountData: Uint8Array;
+  if (Array.isArray(taskQueueAccount.value.data) && taskQueueAccount.value.data.length === 2) {
+    // Account data is [Base64EncodedBytes, "base64"] format
+    accountData = new Uint8Array(Buffer.from(taskQueueAccount.value.data[0] as string, 'base64'));
+  } else if (typeof taskQueueAccount.value.data === 'string') {
+    // Account data is base64 encoded string
+    accountData = new Uint8Array(Buffer.from(taskQueueAccount.value.data, 'base64'));
+  } else {
+    // Already a Uint8Array or other format
+    accountData = new Uint8Array(taskQueueAccount.value.data as any);
+  }
+
+  const { taskBitmap } = parseTaskQueueV0(accountData);
+  const taskId = nextAvailableTaskId(taskBitmap);
+  if (taskId === null) {
+    throw new Error('No available task slots in queue');
+  }
+
+  // 3. Derive task PDA using the imported taskKey function
+  // Convert Address to PublicKey for taskKey function
+  const { PublicKey } = await import("@solana/web3.js");
+  const taskQueuePubkey = new PublicKey(taskQueue);
+  const [taskPDA] = taskKey(taskQueuePubkey, taskId);
+  const taskAddress = taskPDA.toBase58() as Address;
+
+  // 4. Create queue task instruction
+  const instruction = await getQueueTaskV0InstructionAsync({
+    payer: signer,
+    queueAuthority: signer,
+    taskQueue,
+    task: taskAddress,
+    id: taskId,
+    ...args,
+  });
+
+  // 5. Send transaction using connection.sendTransactionFromInstructions
+  const signature = await connection.sendTransactionFromInstructions({
+    feePayer: signer as any, // Type assertion for compatibility
+    instructions: [instruction],
+  });
+
+  return {
+    signature,
+    taskId,
+    taskAddress,
+  };
+};
 
 // Compile instructions into a TukTuk V0 compiled transaction
 const compileTuktukTransaction = (instructions: Array<Instruction>, signersSeedsBytes: Array<Array<Buffer>> = []) => {
   // Collect all unique accounts
   const accountSet = new Set<string>();
-  const accountMetas: Array<{ pubkey: PublicKey; isSigner: boolean; isWritable: boolean }> = [];
+  const accountMetas: Array<{ address: string; isSigner: boolean; isWritable: boolean }> = [];
 
   // Add all accounts from instructions
   for (const instruction of instructions) {
@@ -47,7 +144,7 @@ const compileTuktukTransaction = (instructions: Array<Instruction>, signersSeeds
         if (!accountSet.has(account.address)) {
           accountSet.add(account.address);
           accountMetas.push({
-            pubkey: new PublicKey(account.address),
+            address: account.address,
             isSigner: account.role === AccountRole.READONLY_SIGNER || account.role === AccountRole.WRITABLE_SIGNER,
             isWritable: account.role === AccountRole.WRITABLE || account.role === AccountRole.WRITABLE_SIGNER,
           });
@@ -58,7 +155,7 @@ const compileTuktukTransaction = (instructions: Array<Instruction>, signersSeeds
     if (!accountSet.has(instruction.programAddress)) {
       accountSet.add(instruction.programAddress);
       accountMetas.push({
-        pubkey: new PublicKey(instruction.programAddress),
+        address: instruction.programAddress,
         isSigner: false,
         isWritable: false,
       });
@@ -72,8 +169,8 @@ const compileTuktukTransaction = (instructions: Array<Instruction>, signersSeeds
     return 0;
   });
 
-  const accounts = accountMetas.map((meta) => meta.pubkey);
-  const accountMap = new Map(accounts.map((key, index) => [key.toBase58(), index]));
+  const accounts = accountMetas.map((meta) => meta.address);
+  const accountMap = new Map(accounts.map((address, index) => [address, index]));
 
   // Count account types
   const numRwSigners = accountMetas.filter((m) => m.isSigner && m.isWritable).length;
@@ -101,13 +198,7 @@ const compileTuktukTransaction = (instructions: Array<Instruction>, signersSeeds
     signerSeeds: signersSeedsBytes,
   };
 
-  const remainingAccounts = accountMetas.map((meta) => ({
-    pubkey: meta.pubkey,
-    isSigner: meta.isSigner,
-    isWritable: meta.isWritable,
-  }));
-
-  return { transaction, remainingAccounts };
+  return transaction;
 };
 
 const monitorTask = async (connection: Connection, task: Address): Promise<void> => {
@@ -139,49 +230,31 @@ const taskQueue = await getTaskQueueAddressFromName(connection, keypair, queueNa
 const memoInstruction = getAddMemoInstruction({ memo: message });
 
 console.log("Compiling instructions into a TukTuk transaction...");
-const { transaction, remainingAccounts } = compileTuktukTransaction([memoInstruction], []);
+const transaction = compileTuktukTransaction([memoInstruction], []);
 
-// Queue the task
+// Queue the task using modern implementation
 console.log("Queueing task...");
-console.log("🔧 Queue task params:", {
-  taskQueue: taskQueue,
-  args: {
-    trigger: { now: {} },
+
+const { signature, taskId, taskAddress } = await queueTaskModern(
+  connection,
+  keypair,
+  taskQueue,
+  {
+    trigger: { __kind: 'Now' as const },
+    transaction: {
+      __kind: 'CompiledV0' as const,
+      fields: [transaction],
+    },
     crankReward: null,
     freeTasks: 0,
-    transaction: {
-      compiledV0: [transaction],
-    },
     description: `memo: ${message}`,
-  },
-});
-console.log("🔧 Compiled transaction:", transaction);
-console.log("🔧 Remaining accounts:", remainingAccounts);
-
-// Convert taskQueue from Address to PublicKey for TukTuk SDK
-const taskQueuePubkey = new PublicKey(taskQueue);
-
-const queueTaskTransaction = await queueTask(program, {
-  taskQueue: taskQueuePubkey,
-  args: {
-    trigger: { now: {} },
-    crankReward: null,
-    freeTasks: 0,
-    transaction: {
-      compiledV0: [transaction],
-    },
-    description: `memo: ${message}`,
-  },
-});
-
-const {
-  pubkeys: { task },
-  signature,
-} = await queueTaskTransaction.remainingAccounts(remainingAccounts).rpcAndKeys();
+  }
+);
 
 console.log("Task queued! Transaction signature:", signature);
-console.log("Task address:", task.toBase58());
+console.log("Task ID:", taskId);
+console.log("Task address:", taskAddress);
 
 // Monitor task status
 console.log("\nMonitoring task status...");
-await monitorTask(connection, task.toBase58() as Address);
+await monitorTask(connection, taskAddress);
