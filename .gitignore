@@ -1,3 +1,5 @@
 /target
 .env
 config*.toml
+**/node_modules/
+**/dist/
