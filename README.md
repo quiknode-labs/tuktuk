@@ -5,6 +5,7 @@ Run your permissionless cranks on Solana
 ![TukTuk](./tuktuk.jpg)
 
 ## Table of Contents
+
 - [Introduction](#introduction)
 - [Running a Crank Turner](#running-a-crank-turner)
   - [Requirements](#requirements)
@@ -34,7 +35,7 @@ Run your permissionless cranks on Solana
 
 Tuktuk is a permissionless crank service. If you have a Solana smart contract endpoint that needs to be run on a trigger or specific time, you can use tuktuk to run it. Endponts need to be more or less permissionless, though you can have tuktuk provide PDA signatures.
 
-Tuktuk's architecture allows for crankers to run a simple rust util that requires only a working solana RPC url and very minimal dependencies. There is no dependency on geyser, yellowstone, or any other indexing service.
+Tuktuk's architecture allows for crankers to run a simple rust util that requires only a working solana RPC url and very minimal dependencies. There is no dependency on Yellowstone Geyser gRPC, or any other indexing service.
 
 Creators of Task Queues set their payment per-crank turn in SOL. Crankers that run the tasks are paid out in SOL for each crank they complete. There is a minimum deposit of 1 SOL to create a task queue to discourage spam. This deposit is refunded when the task queue is closed. The intent is to minimize the number of task queues that crank turners need to watch. You should try to reuse task queues as much as possible. It is an antipattern to create a new task queue for each user, for example.
 
@@ -92,7 +93,7 @@ Make sure you also have openssl installed:
 brew install openssl
 ```
 
-### Installation 
+### Installation
 
 Install the tuktuk cli by running:
 
@@ -110,7 +111,7 @@ First, you'll need to get some SOL to fund the task queue. You can get SOL from 
 
 Next, create a task queue. A task queue has a default crank reward that will be used for all tasks in the queue, but each task can override this reward. Since crankers pay sol (and possibly priority fees) for each crank, the crank reward should be higher than the cost of a crank or crankers will not be incentivized to run your task.
 
-Note that the `funding-amount` you specify is not inclusive of the 1 SOL minimum deposit. The funding amount will be used to pay the fees for tasks queued recursively (ie, by other tasks). 
+Note that the `funding-amount` you specify is not inclusive of the 1 SOL minimum deposit. The funding amount will be used to pay the fees for tasks queued recursively (ie, by other tasks).
 
 ```bash
 tuktuk -u <your-solana-url> task-queue create --name <your-queue-name> --capacity 10 --funding-amount 100000000 --queue-authority <the-authority-to-queue-tasks> --crank-reward 1000000
@@ -288,7 +289,7 @@ tuktuk -u <your-solana-url> task run --task-queue-name <your-queue-name> --descr
 
 ### Closing Tasks
 
-A task queue has a limited capacity. Therefore, you will want to close tasks that have failed and will never be able to succeed. When you close these tasks, you will be refunded the SOL fees. 
+A task queue has a limited capacity. Therefore, you will want to close tasks that have failed and will never be able to succeed. When you close these tasks, you will be refunded the SOL fees.
 
 ```bash
 tuktuk -u <your-solana-url> task close --task-queue-name <your-queue-name> --task-id <task-id>
@@ -329,20 +330,25 @@ env TESTING=true anchor test
 ### Common Issues and Solutions
 
 #### Account Not Initialized Error
+
 ```
 Program log: AnchorError caused by account: task. Error Code: AccountNotInitialized. Error Number: 3012. Error Message: The program expected this account to be already initialized.
 ```
+
 This error is normal and can be safely ignored. It occurs when multiple crank turners attempt to execute the same task simultaneously. When the second crank turner tries to run the task, it fails because the first one already completed and closed the task account.
 
 #### Task Not Running
+
 If your task isn't being executed:
 
 1. First, locate your task ID using the task list command:
+
    ```bash
    tuktuk -u <your-solana-url> task list --task-queue-name <your-queue-name>
    ```
 
 2. If the task simulation looks successful but isn't running, try running it manually:
+
    ```bash
    tuktuk -u <your-solana-url> task run --task-queue-name <your-queue-name> --task-id <task-id>
    ```
@@ -353,15 +359,17 @@ If your task isn't being executed:
    ```
 
 #### Cron Job Stopped Running
+
 If your cron job has stopped executing, it may have been removed from the queue due to insufficient funding or other issues. See the [Cron Task Requeuing](#cron-task-requeuing) section for instructions on how to requeue your cron job.
 
 #### Task Fixed But Not Running
+
 If you had a failing task that you've fixed, but crank turners are no longer attempting to run it, this is because crank turners ignore tasks after running out of retries. To resolve this:
 
 1. Run the task manually using the task run command:
+
    ```bash
    tuktuk -u <your-solana-url> task run --task-queue-name <your-queue-name> --task-id <task-id>
    ```
 
 2. If the task succeeds, it will be marked as complete and removed from the queue.
-

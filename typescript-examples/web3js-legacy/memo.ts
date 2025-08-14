@@ -5,15 +5,11 @@ import {
   queueTask,
 } from "@helium/tuktuk-sdk";
 import { Connection, Keypair } from "@solana/web3.js";
-import {
-  initializeTaskQueue,
-  monitorTask,
-  makeMemoInstruction,
-} from "./helpers";
+import { initializeTaskQueue, monitorTask, makeMemoInstruction } from "./helpers";
 import { getKeypairFromFile } from "@solana-developers/helpers";
 
 // Name of the task queue (one will be created if it doesn't exist).
-// NOTE: This will cost 1 sol to create. You can recover this by deleting the queue using the tuktuk-cli
+// NOTE: This will cost 1 SOL to create. You can recover this by deleting the queue using the tuktuk-cli
 const queueName = "banana-queue";
 
 // Path to your Solana wallet keypair file
@@ -46,10 +42,7 @@ const taskQueue = await initializeTaskQueue(program, queueName);
 const memoInstruction = makeMemoInstruction(message);
 
 console.log("Compiling instructions...");
-const { transaction, remainingAccounts } = compileTuktukTransaction(
-  [memoInstruction],
-  []
-);
+const { transaction, remainingAccounts } = compileTuktukTransaction([memoInstruction], []);
 
 // Queue the task
 console.log("Queueing task...");
@@ -68,9 +61,7 @@ const queueTaskTransaction = await queueTask(program, {
 const {
   pubkeys: { task },
   signature,
-} = await queueTaskTransaction
-  .remainingAccounts(remainingAccounts)
-  .rpcAndKeys();
+} = await queueTaskTransaction.remainingAccounts(remainingAccounts).rpcAndKeys();
 
 console.log("Task queued! Transaction signature:", signature);
 console.log("Task address:", task.toBase58());
