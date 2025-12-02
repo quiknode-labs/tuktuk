@@ -33,7 +33,7 @@ Run your permissionless cranks on Solana
 
 ## Introduction
 
-Tuktuk is a permissionless crank service. If you have a Solana smart contract endpoint that needs to be run on a trigger or specific time, you can use tuktuk to run it. Endponts need to be more or less permissionless, though you can have tuktuk provide PDA signatures.
+Tuktuk is a permissionless crank service. If you have a Solana smart contract endpoint that needs to be run on a trigger or specific time, you can use tuktuk to run it. Endpoints need to be more or less permissionless, though you can have tuktuk provide PDA signatures.
 
 Tuktuk's architecture allows for crankers to run a simple rust util that requires only a working solana RPC url and very minimal dependencies. There is no dependency on Yellowstone Geyser gRPC, or any other indexing service.
 
