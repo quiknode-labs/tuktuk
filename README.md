@@ -33,21 +33,21 @@ Run your permissionless cranks on Solana
 
 ## Introduction
 
-Tuktuk is a permissionless crank service. If you have a Solana smart contract endpoint that needs to be run on a trigger or specific time, you can use tuktuk to run it. Endpoints need to be more or less permissionless, though you can have tuktuk provide PDA signatures.
+Tuktuk is a permissionless task automation service. If you have a Solana instruction handler that needs to be run on a trigger or specific time, you can use tuktuk to run it. Instruction handlers need to be more or less permissionless, though you can have tuktuk provide PDA signatures.
 
-Tuktuk's architecture allows for crankers to run a simple rust util that requires only a working solana RPC url and very minimal dependencies. There is no dependency on Yellowstone Geyser gRPC, or any other indexing service.
+Crank turners - people that run jobs in exchange for a small reward - run a simple rust util that requires only a working Solana RPC URL and very minimal dependencies.
 
-Creators of Task Queues set their payment per-crank turn in SOL. Crankers that run the tasks are paid out in SOL for each crank they complete. There is a minimum deposit of 1 SOL to create a task queue to discourage spam. This deposit is refunded when the task queue is closed. The intent is to minimize the number of task queues that crank turners need to watch. You should try to reuse task queues as much as possible. It is an antipattern to create a new task queue for each user, for example.
+Creators of Task Queues - people that have jobs that need to run at a specific time - set their payment per-crank turn in SOL. Crankers that run the tasks are paid out in SOL for each crank they complete. There is a minimum deposit of 1 SOL to create a task queue to discourage spam. This deposit is refunded when the task queue is closed. The intent is to minimize the number of task queues that crank turners need to watch. You should try to reuse task queues as much as possible. It is an antipattern to create a new task queue for each user, for example.
 
 ## Running a Crank Turner
 
-Install the crank turner:
+If you want to run a crank turner, install the crank turner crate:
 
 ```bash
 cargo install tuktuk-crank-turner
 ```
 
-If you want to run a crank turner, create a config.toml file with the following:
+Create a config.toml file with the following:
 
 ```toml
 rpc_url = "https://api.mainnet-beta.solana.com"
@@ -74,9 +74,9 @@ tuktuk-crank-turner
 
 You will need a good Solana RPC that doesn't have heavy rate limits (for when there are a lot of tasks queued). You should also handle restarting the process if it crashes, as this can happen if your RPC disconnects the websocket without a proper handshake.
 
-## Usage
+## Usage for people that have tasks to run
 
-First, you'll want to install the tuktuk-cli. The cli is great for debugging and managing your task queue.
+First, you'll want to install the tuktuk-cli. The CLI is great for debugging and managing your task queue.
 
 ### Prerequisites
 
