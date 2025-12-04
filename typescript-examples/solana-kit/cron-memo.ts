@@ -1,5 +1,11 @@
 import { connect } from "solana-kite";
-import { getTaskQueueAddressFromName, getCronJobForName } from "./helpers.js";
+import {
+  getOrCreateTaskQueue,
+  getCronJobForName,
+  createCronJob,
+  addCronTransaction,
+  compileTuktukTransaction,
+} from "./helpers.js";
 import { getAddMemoInstruction } from "@solana-program/memo";
 import { getTransferSolInstruction } from "@solana-program/system";
 import type { Address } from "@solana/kit";
@@ -16,7 +22,7 @@ const walletPath = "/Users/mike/.config/solana/id.json";
 // Message to write in the memo
 const message = "Hello TukTuk Cron!";
 
-// Amount of SOL to fund the cron job with (default: 0.01 SOL)
+// Amount of SOL to fund the cron job with (in SOL)
 const fundingAmount = 0.01;
 
 // Load wallet and connection
@@ -27,15 +33,44 @@ console.log("Using wallet:", keypair.address);
 console.log("Message:", message);
 
 // Get the task queue address
-const taskQueue = await getTaskQueueAddressFromName(connection, keypair, queueName);
+const taskQueue = await getOrCreateTaskQueue(connection, keypair, queueName);
 
 // Check if cron job already exists
-let cronJob = await getCronJobForName(connection, cronName);
+let cronJob = await getCronJobForName(connection, keypair, cronName);
 
 if (!cronJob) {
-  console.log("Cron job not found. Use the web3js-legacy version to create cron jobs first.");
-  console.log("Run: cd ../web3js-legacy && npx tsx cron-memo.ts");
-  process.exit(1);
+  console.log("Cron job not found, creating...");
+
+  // Create the cron job
+  cronJob = await createCronJob(connection, keypair, taskQueue, {
+    name: cronName,
+    schedule: "0 * * * * *", // Run every minute
+    freeTasksPerTransaction: 0, // Memo doesn't need to schedule more transactions
+    numTasksPerQueueCall: 1, // Just one transaction per cron job
+  });
+
+  // Fund the cron job with SOL
+  console.log(`Funding cron job with ${fundingAmount} SOL...`);
+  const fundingLamports = BigInt(Math.floor(fundingAmount * 1_000_000_000));
+  const transferInstruction = getTransferSolInstruction({
+    source: keypair,
+    destination: cronJob,
+    amount: fundingLamports,
+  });
+  await connection.sendTransactionFromInstructions({
+    feePayer: keypair,
+    instructions: [transferInstruction],
+  });
+  console.log("✅ Cron job funded");
+
+  // Create the memo instruction and compile it
+  const memoInstruction = getAddMemoInstruction({ memo: message });
+  console.log("Compiling instructions...");
+  const compiledTransaction = compileTuktukTransaction([memoInstruction], []);
+
+  // Add the transaction to the cron job
+  await addCronTransaction(connection, keypair, cronJob, 0, compiledTransaction);
+  console.log("✅ Cron job created!");
 } else {
   console.log("Cron job already exists");
 }

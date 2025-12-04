@@ -1,5 +1,5 @@
 import { connect } from "solana-kite";
-import { getTaskQueueAddressFromName, queueTask, compileTuktukTransaction, monitorTask } from "./helpers.js";
+import { getOrCreateTaskQueue, queueTask, compileTuktukTransaction, monitorTask } from "./helpers.js";
 import { getAddMemoInstruction } from "@solana-program/memo";
 
 // Name of the task queue (one will be created if it doesn't exist).
@@ -18,7 +18,7 @@ const keypair = await connection.loadWalletFromFile(walletPath);
 console.log("Using wallet:", keypair.address);
 console.log("Will write message:", message);
 
-const taskQueue = await getTaskQueueAddressFromName(connection, keypair, queueName);
+const taskQueue = await getOrCreateTaskQueue(connection, keypair, queueName);
 
 const memoInstruction = getAddMemoInstruction({ memo: message });
 

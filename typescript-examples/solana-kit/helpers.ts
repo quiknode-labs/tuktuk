@@ -17,15 +17,21 @@ import {
   getQueueTaskV0InstructionAsync,
   getInitializeTaskQueueV0Instruction,
   fetchMaybeTuktukConfigV0,
+  fetchTaskQueueV0,
 } from "./dist/tuktuk-js-client/index.js";
-import { CRON_PROGRAM_ADDRESS, fetchMaybeCronJobNameMappingV0 } from "./dist/cron-js-client/index.js";
-import { taskKey } from "@helium/tuktuk-sdk";
+import {
+  CRON_PROGRAM_ADDRESS,
+  fetchMaybeCronJobNameMappingV0,
+  getInitializeCronJobV0InstructionAsync,
+  fetchMaybeUserCronJobsV0,
+  getAddCronTransactionV0Instruction,
+} from "./dist/cron-js-client/index.js";
+import { getTransferSolInstruction } from "@solana-program/system";
 
 const addressEncoder = getAddressEncoder();
 
-// The web3.js c2 equivalent of
-//    bigNumber.toArrayLike(Buffer, "le", 8),
-// from web3.js v1
+// Convert a BigInt to a little-endian byte array of specified length
+// Used for encoding numeric seeds for PDA derivation
 const bigIntToSeed = (bigInt: bigint, byteLength: number): Uint8Array => {
   const bytes = new Uint8Array(byteLength);
   for (let i = 0; i < byteLength && bigInt > 0n; i++) {
@@ -35,14 +41,11 @@ const bigIntToSeed = (bigInt: bigint, byteLength: number): Uint8Array => {
   return bytes;
 };
 
-// Previously called initializeTaskQueue - renamed for clarity
-export const getTaskQueueAddressFromName = async (
+export const getOrCreateTaskQueue = async (
   connection: Connection,
   user: KeyPairSigner,
   taskQueueName: string,
 ): Promise<Address> => {
-  console.log("🔍 Looking for task queue with name:", taskQueueName);
-
   // Get the tuktuk config PDA (seeds: ["tuktuk_config"])
   const tuktukConfigPda = await connection.getPDAAndBump(TUKTUK_PROGRAM_ADDRESS, ["tuktuk_config"]);
   const tuktukConfig = tuktukConfigPda.pda;
@@ -55,7 +58,6 @@ export const getTaskQueueAddressFromName = async (
     tuktukConfig,
     taskQueueNameHash,
   ]);
-  console.log("🔍 Task queue name mapping PDA:", taskQueueNameMappingPda.pda);
 
   // Get the TuTuk program's task queue name mapping accounts
   const getTaskQueueNameMappings = connection.getAccountsFactory(
@@ -67,16 +69,13 @@ export const getTaskQueueAddressFromName = async (
   // Try to fetch the task queue name mapping to get the actual task queue address
   const nameMappings = await getTaskQueueNameMappings();
 
-  console.log(`we are looking for ${taskQueueName}`);
-
-  // Is there an account with a name that matches the task queue name?
+  // Search for an existing task queue with this name
   const queueNameMapping =
     nameMappings.find((nameMapping) => nameMapping.exists && nameMapping.data.name === taskQueueName) || null;
 
   let taskQueue: Address;
   if (queueNameMapping?.exists) {
     taskQueue = queueNameMapping.data.taskQueue;
-    console.log("🔍 Found existing task queue:", taskQueue);
   } else {
     console.log("Task queue not found, creating...");
 
@@ -125,22 +124,14 @@ export const getTaskQueueAddressFromName = async (
   }
 
   // Check if queue authority exists for our wallet
-  console.log("🔍 Checking queue authority...");
   const taskQueueAuthority = (
     await connection.getPDAAndBump(TUKTUK_PROGRAM_ADDRESS, ["task_queue_authority", taskQueue, user.address])
   ).pda;
-  console.log("🔍 Queue authority PDA:", taskQueueAuthority);
 
   const queueAuthorityAccount = await fetchMaybeTaskQueueAuthorityV0(connection.rpc, taskQueueAuthority);
-  console.log("🔍 Queue authority exists:", queueAuthorityAccount.exists);
 
   if (!queueAuthorityAccount.exists) {
-    console.log("Queue authority not found, creating...");
-    console.log("🔧 Adding queue authority with accounts:", {
-      payer: user.address,
-      queueAuthority: user.address,
-      taskQueue: taskQueue,
-    });
+    console.log("Adding queue authority...");
 
     const addAuthorityInstruction = getAddQueueAuthorityV0Instruction({
       payer: user,
@@ -211,7 +202,7 @@ const parseTaskQueueV0 = (accountData: Uint8Array) => {
   return { capacity, taskBitmap };
 };
 
-// Modern queueTask replacement using Solana Kit/Kite/Codama
+// Queue a task to be executed on a task queue
 export const queueTask = async (
   connection: Connection,
   signer: TransactionSigner,
@@ -253,12 +244,10 @@ export const queueTask = async (
     throw new Error("No available task slots in queue");
   }
 
-  // 3. Derive task PDA using the imported taskKey function
-  // Convert Address to PublicKey for taskKey function
-  const { PublicKey } = await import("@solana/web3.js");
-  const taskQueuePubkey = new PublicKey(taskQueue);
-  const [taskPDA] = taskKey(taskQueuePubkey, taskId);
-  const taskAddress = taskPDA.toBase58() as Address;
+  // 3. Derive task PDA (seeds: ["task", taskQueue, taskId (u16 LE)])
+  const taskIdBuffer = bigIntToSeed(BigInt(taskId), 2);
+  const taskPda = await connection.getPDAAndBump(TUKTUK_PROGRAM_ADDRESS, ["task", taskQueue, taskIdBuffer]);
+  const taskAddress = taskPda.pda;
 
   // 4. Create queue task instruction
   const instruction = await getQueueTaskV0InstructionAsync({
@@ -357,6 +346,7 @@ export const compileTuktukTransaction = (
 };
 
 export const monitorTask = async (connection: Connection, task: Address): Promise<void> => {
+  const TASK_POLL_INTERVAL_MS = 2000; // Poll every 2 seconds
   return new Promise<void>((resolve) => {
     const interval = setInterval(async () => {
       try {
@@ -373,7 +363,7 @@ export const monitorTask = async (connection: Connection, task: Address): Promis
         clearInterval(interval);
         resolve();
       }
-    }, 2000);
+    }, TASK_POLL_INTERVAL_MS);
   });
 };
 
@@ -386,7 +376,7 @@ const hashCronName = async (cronName: string): Promise<Uint8Array> => {
   return new Uint8Array(hashBuffer);
 };
 
-// Helper to hash task queue names (same as hashCronName)
+// Hash a task queue name using SHA-256
 const hashTaskQueueName = async (name: string): Promise<Uint8Array> => {
   const encoder = new TextEncoder();
   const data = encoder.encode(name);
@@ -394,15 +384,16 @@ const hashTaskQueueName = async (name: string): Promise<Uint8Array> => {
   return new Uint8Array(hashBuffer);
 };
 
-// TODO: maybe rename to getCronJobAddressForName
-export const getCronJobForName = async (connection: Connection, cronName: string): Promise<Address | null> => {
-  const keypair = await connection.loadWalletFromFile("/Users/mike/.config/solana/id.json");
-
+export const getCronJobForName = async (
+  connection: Connection,
+  authority: KeyPairSigner,
+  cronName: string,
+): Promise<Address | null> => {
   try {
-    // Equivalent to cronJobNameMappingKey from original cron-sdk
+    // Derive cron job name mapping PDA (seeds: ["cron_job_name_mapping", authority, sha256(name)])
     const { pda: nameMappingAddress } = await connection.getPDAAndBump(CRON_PROGRAM_ADDRESS, [
       "cron_job_name_mapping",
-      keypair.address,
+      authority.address,
       await hashCronName(cronName),
     ]);
 
@@ -418,4 +409,117 @@ export const getCronJobForName = async (connection: Connection, cronName: string
   } catch (error) {
     throw new Error(`Error fetching cron job for name: ${cronName}`, { cause: error });
   }
+};
+
+// Create a new cron job
+export const createCronJob = async (
+  connection: Connection,
+  authority: KeyPairSigner,
+  taskQueue: Address,
+  args: {
+    name: string;
+    schedule: string;
+    freeTasksPerTransaction: number;
+    numTasksPerQueueCall: number;
+  },
+): Promise<Address> => {
+  console.log("Creating cron job:", args.name);
+
+  // Get user_cron_jobs PDA (seeds: ["user_cron_jobs", authority])
+  const userCronJobsPda = await connection.getPDAAndBump(CRON_PROGRAM_ADDRESS, ["user_cron_jobs", authority.address]);
+
+  // Fetch userCronJobs to get the next cron job ID
+  const userCronJobs = await fetchMaybeUserCronJobsV0(connection.rpc, userCronJobsPda.pda);
+  const nextCronJobId = userCronJobs.exists ? userCronJobs.data.nextCronJobId : 0;
+
+  // Derive cron job PDA (seeds: ["cron_job", authority, nextCronJobId (u32 LE)])
+  const cronJobIdBuffer = bigIntToSeed(BigInt(nextCronJobId), 4);
+  const cronJobPda = await connection.getPDAAndBump(CRON_PROGRAM_ADDRESS, [
+    "cron_job",
+    authority.address,
+    cronJobIdBuffer,
+  ]);
+  const cronJob = cronJobPda.pda;
+
+  // Derive cron job name mapping PDA (seeds: ["cron_job_name_mapping", authority, sha256(name)])
+  const cronJobNameHash = await hashCronName(args.name);
+  const cronJobNameMappingPda = await connection.getPDAAndBump(CRON_PROGRAM_ADDRESS, [
+    "cron_job_name_mapping",
+    authority.address,
+    cronJobNameHash,
+  ]);
+
+  // Fetch task queue to find next available task ID
+  const taskQueueAccount = await fetchTaskQueueV0(connection.rpc, taskQueue);
+  const taskBitmap = taskQueueAccount.data.taskBitmap;
+  const nextTaskId = nextAvailableTaskId(taskBitmap);
+  if (nextTaskId === null) {
+    throw new Error("No available task slots in queue");
+  }
+
+  // Derive task PDA (seeds: ["task", taskQueue, nextTaskId (u16 LE)])
+  const taskIdBuffer = bigIntToSeed(BigInt(nextTaskId), 2);
+  const taskPda = await connection.getPDAAndBump(TUKTUK_PROGRAM_ADDRESS, ["task", taskQueue, taskIdBuffer]);
+  const task = taskPda.pda;
+
+  // Create the initialize cron job instruction
+  const initInstruction = await getInitializeCronJobV0InstructionAsync({
+    payer: authority,
+    queueAuthority: authority,
+    authority,
+    cronJob,
+    cronJobNameMapping: cronJobNameMappingPda.pda,
+    taskQueue,
+    task,
+    schedule: args.schedule,
+    name: args.name,
+    freeTasksPerTransaction: args.freeTasksPerTransaction,
+    numTasksPerQueueCall: args.numTasksPerQueueCall,
+  });
+
+  await connection.sendTransactionFromInstructions({
+    feePayer: authority,
+    instructions: [initInstruction],
+  });
+
+  console.log("✅ Cron job created:", cronJob);
+  return cronJob;
+};
+
+// Add a transaction to a cron job
+export const addCronTransaction = async (
+  connection: Connection,
+  authority: KeyPairSigner,
+  cronJob: Address,
+  transactionIndex: number,
+  transaction: ReturnType<typeof compileTuktukTransaction>,
+): Promise<void> => {
+  console.log(`Adding transaction ${transactionIndex} to cron job...`);
+
+  // Derive cron job transaction PDA (seeds: ["cron_job_transaction", cronJob, transactionIndex (u32 LE)])
+  const cronJobTransactionIdBuffer = bigIntToSeed(BigInt(transactionIndex), 4);
+  const cronJobTransactionPda = await connection.getPDAAndBump(CRON_PROGRAM_ADDRESS, [
+    "cron_job_transaction",
+    cronJob,
+    cronJobTransactionIdBuffer,
+  ]);
+
+  const addTransactionInstruction = getAddCronTransactionV0Instruction({
+    payer: authority,
+    authority,
+    cronJob,
+    cronJobTransaction: cronJobTransactionPda.pda,
+    index: transactionIndex,
+    transactionSource: {
+      __kind: "CompiledV0" as const,
+      fields: [transaction],
+    },
+  });
+
+  await connection.sendTransactionFromInstructions({
+    feePayer: authority,
+    instructions: [addTransactionInstruction],
+  });
+
+  console.log("✅ Transaction added to cron job");
 };
