@@ -1,8 +1,5 @@
 import { connect } from "solana-kite";
-import { 
-  getTaskQueueAddressFromName, 
-  getCronJobForName
-} from "./helpers.js";
+import { getTaskQueueAddressFromName, getCronJobForName } from "./helpers.js";
 import { getAddMemoInstruction } from "@solana-program/memo";
 import { getTransferSolInstruction } from "@solana-program/system";
 import type { Address } from "@solana/kit";
@@ -45,11 +42,9 @@ if (!cronJob) {
 
 console.log("Cron job address:", cronJob);
 console.log(
-  `\nYour memo will be posted every minute. Watch for transactions on task queue ${taskQueue}. To stop the cron job, use the tuktuk-cli:`
+  `\nYour memo will be posted every minute. Watch for transactions on task queue ${taskQueue}. To stop the cron job, use the tuktuk-cli:`,
 );
 console.log(
-  `tuktuk -u https://api.devnet.solana.com -w ${walletPath} cron-transaction close --cron-name ${cronName} --id 0`
+  `tuktuk -u https://api.devnet.solana.com -w ${walletPath} cron-transaction close --cron-name ${cronName} --id 0`,
 );
-console.log(
-  `tuktuk -u https://api.devnet.solana.com -w ${walletPath} cron close --cron-name ${cronName}`
-);
+console.log(`tuktuk -u https://api.devnet.solana.com -w ${walletPath} cron close --cron-name ${cronName}`);

@@ -15,6 +15,8 @@ import {
   TASK_QUEUE_NAME_MAPPING_V0_DISCRIMINATOR,
   getTaskQueueNameMappingV0Decoder,
   getQueueTaskV0InstructionAsync,
+  getInitializeTaskQueueV0Instruction,
+  fetchMaybeTuktukConfigV0,
 } from "./dist/tuktuk-js-client/index.js";
 import { CRON_PROGRAM_ADDRESS, fetchMaybeCronJobNameMappingV0 } from "./dist/cron-js-client/index.js";
 import { taskKey } from "@helium/tuktuk-sdk";
@@ -41,35 +43,26 @@ export const getTaskQueueAddressFromName = async (
 ): Promise<Address> => {
   console.log("🔍 Looking for task queue with name:", taskQueueName);
 
+  // Get the tuktuk config PDA (seeds: ["tuktuk_config"])
+  const tuktukConfigPda = await connection.getPDAAndBump(TUKTUK_PROGRAM_ADDRESS, ["tuktuk_config"]);
+  const tuktukConfig = tuktukConfigPda.pda;
+
+  // Derive the PDA for the task queue name mapping
+  // Seeds: ["task_queue_name_mapping", tuktukConfig, sha256(name)]
+  const taskQueueNameHash = await hashTaskQueueName(taskQueueName);
+  const taskQueueNameMappingPda = await connection.getPDAAndBump(TUKTUK_PROGRAM_ADDRESS, [
+    "task_queue_name_mapping",
+    tuktukConfig,
+    taskQueueNameHash,
+  ]);
+  console.log("🔍 Task queue name mapping PDA:", taskQueueNameMappingPda.pda);
+
   // Get the TuTuk program's task queue name mapping accounts
-  // They look like:
-  //
-  // {
-  //   executable: false,
-  //   lamports: 1371120n,
-  //   programAddress: 'tuktukUrfhXT6ZT77QTU8RQtvgL967uRuVagWF57zVA',
-  //   space: 69n,
-  //   address: '6kBkBiEhk9hCG1zA13dRYuii8uUViBr4cgXm2Q3MShD4',
-  //   data: {
-  //     discriminator: [Uint8Array],
-  //     taskQueue: 'AB4KBiDsR7xHRNmajerryLdRSVX6AsUFGpeQvEAo7k91',
-  //     name: 'crank-tester',
-  //     bumpSeed: 255
-  //   },
-  //   exists: true
-  // },
   const getTaskQueueNameMappings = connection.getAccountsFactory(
     TUKTUK_PROGRAM_ADDRESS,
     TASK_QUEUE_NAME_MAPPING_V0_DISCRIMINATOR,
     getTaskQueueNameMappingV0Decoder(),
   );
-
-  // Derive the PDA for the task queue name mapping
-  const taskQueueNameMappingPda = await connection.getPDAAndBump(TUKTUK_PROGRAM_ADDRESS, [
-    "task_queue_name",
-    taskQueueName,
-  ]);
-  console.log("🔍 Task queue name mapping PDA:", taskQueueNameMappingPda.pda);
 
   // Try to fetch the task queue name mapping to get the actual task queue address
   const nameMappings = await getTaskQueueNameMappings();
@@ -85,7 +78,50 @@ export const getTaskQueueAddressFromName = async (
     taskQueue = queueNameMapping.data.taskQueue;
     console.log("🔍 Found existing task queue:", taskQueue);
   } else {
-    throw new Error(`Task queue with name "${taskQueueName}" not found. You may need to create it first.`);
+    console.log("Task queue not found, creating...");
+
+    // Fetch the tuktuk config to get the next task queue ID
+    const tuktukConfigAccount = await fetchMaybeTuktukConfigV0(connection.rpc, tuktukConfig);
+    if (!tuktukConfigAccount.exists) {
+      throw new Error("TukTuk config not found. The program may not be initialized.");
+    }
+    const nextTaskQueueId = tuktukConfigAccount.data.nextTaskQueueId;
+
+    // Derive the task queue PDA
+    // Seeds: ["task_queue", tuktukConfig, nextTaskQueueId (as u32 LE)]
+    const taskQueueIdBuffer = bigIntToSeed(BigInt(nextTaskQueueId), 4);
+    const taskQueuePda = await connection.getPDAAndBump(TUKTUK_PROGRAM_ADDRESS, [
+      "task_queue",
+      tuktukConfig,
+      taskQueueIdBuffer,
+    ]);
+    taskQueue = taskQueuePda.pda;
+
+    // Create the task queue
+    const HOURS_IN_SECONDS = 60 * 60;
+    const MIN_CRANK_REWARD = 10000n;
+    const CAPACITY = 10;
+    const STALE_TASK_AGE_SECONDS = 48 * HOURS_IN_SECONDS;
+
+    const createTaskQueueInstruction = getInitializeTaskQueueV0Instruction({
+      payer: user,
+      tuktukConfig,
+      updateAuthority: user.address,
+      taskQueue,
+      taskQueueNameMapping: taskQueueNameMappingPda.pda,
+      minCrankReward: MIN_CRANK_REWARD,
+      name: taskQueueName,
+      capacity: CAPACITY,
+      lookupTables: [],
+      staleTaskAge: STALE_TASK_AGE_SECONDS,
+    });
+
+    await connection.sendTransactionFromInstructions({
+      feePayer: user,
+      instructions: [createTaskQueueInstruction],
+    });
+
+    console.log("✅ Task queue created:", taskQueue);
   }
 
   // Check if queue authority exists for our wallet
@@ -347,6 +383,14 @@ const hashCronName = async (cronName: string): Promise<Uint8Array> => {
   const hashBuffer = await crypto.subtle.digest("SHA-256", data);
 
   // Return the hash bytes directly - no need for hex conversion roundtrip
+  return new Uint8Array(hashBuffer);
+};
+
+// Helper to hash task queue names (same as hashCronName)
+const hashTaskQueueName = async (name: string): Promise<Uint8Array> => {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(name);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
   return new Uint8Array(hashBuffer);
 };
 
