@@ -33,11 +33,77 @@ Run your permissionless cranks on Solana
 
 ## Introduction
 
-Tuktuk is a permissionless task automation service. If you have a Solana instruction handler that needs to be run on a trigger or specific time, you can use tuktuk to run it. Instruction handlers need to be more or less permissionless, though you can have tuktuk provide PDA signatures.
+TukTuk is a permissionless task automation service for Solana. If you have a transaction that needs to run at a specific time or on a recurring schedule, TukTuk can execute it for you automatically.
 
-Crank turners - people that run jobs in exchange for a small reward - run a simple rust util that requires only a working Solana RPC URL and very minimal dependencies.
+### Core Concepts
 
-Creators of Task Queues - people that have jobs that need to run at a specific time - set their payment per-crank turn in SOL. Crankers that run the tasks are paid out in SOL for each crank they complete. There is a minimum deposit of 1 SOL to create a task queue to discourage spam. This deposit is refunded when the task queue is closed. The intent is to minimize the number of task queues that crank turners need to watch. You should try to reuse task queues as much as possible. It is an antipattern to create a new task queue for each user, for example.
+**What is a Task?**
+A task is a complete Solana transaction (one or more instructions) that you want executed at a specific time. When you create a task, you provide:
+- The compiled transaction to execute
+- When to run it (immediately, at a specific timestamp, or on a schedule)
+- A small SOL reward for whoever executes it
+
+**What is a Task Queue?**
+A task queue is a shared pool where multiple tasks wait to be executed. Think of it like a waiting room for transactions. Task queues:
+- Hold up to a configurable number of tasks (e.g., 10 tasks)
+- Have a default reward amount paid to executors
+- Can be shared across multiple use cases and users
+- Cost 1 SOL to create (refunded when closed) to discourage spam
+- Should be reused when possible - creating a separate queue per user is an antipattern
+
+**What is a Queue Authority?**
+A queue authority is a wallet address that has permission to add tasks to a specific task queue. When you create a task queue, you specify which addresses can queue tasks. Multiple authorities can be added to a single queue, which is useful for:
+- Allowing a backend service to queue tasks on behalf of users
+- Giving multiple team members access to queue tasks
+- Letting audited smart contracts (via PDA) queue specific types of tasks
+- Having both admin and automated authorities for different purposes
+
+Only queue authorities can add tasks, but anyone running a crank turner can execute tasks once they're queued.
+
+**What is a Crank Turner?**
+A crank turner is someone running TukTuk software that monitors task queues and executes ready tasks. They:
+- Monitor task queues looking for tasks that are ready to run
+- Execute the tasks by submitting the transactions to Solana
+- Get paid the task's reward amount in SOL for each successful execution
+- Pay the transaction fees themselves, so rewards must exceed these costs
+
+**Task Triggers**
+When you queue a task, you specify when it should run using a trigger:
+- **Now**: Execute immediately when a crank turner picks it up
+- **Timestamp**: Execute at or after a specific Unix timestamp
+
+Crank turners continuously monitor queues and execute tasks as soon as their trigger conditions are met.
+
+**Task Rewards and Funding**
+Each task has a SOL reward that incentivizes crank turners to execute it. The reward can be set per-task or default to the queue's minimum reward. Task creators pay for:
+- The reward amount (goes to the crank turner)
+- Account rent for the task (refunded when task completes)
+
+Task queues can also hold funding for special cases where tasks queue other tasks recursively (like cron jobs).
+
+**Task Descriptions**
+Every task has an optional description field that helps you organize and filter tasks. Descriptions are especially useful when multiple types of tasks share the same queue - you can list or close tasks by description prefix.
+
+**Remote Transactions**
+For complex transactions that can't be compiled ahead of time (like those requiring Merkle proofs), TukTuk supports remote transaction generation. You provide a URL, and when the task runs, TukTuk fetches the transaction from your server. This allows dynamic transaction construction while maintaining security through signatures.
+
+**One-time vs Recurring Tasks**
+
+*One-time tasks:* Schedule a transaction to run once, either immediately or at a future timestamp. The task is automatically closed after execution, and rent is refunded to the task creator.
+
+*Recurring tasks (Cron Jobs):* Schedule a transaction to run repeatedly on a schedule (e.g., every minute, hourly, daily). TukTuk automatically:
+- Queues the next execution after each run
+- Continues running until you stop the cron job
+- Requires the cron job account to be funded to pay for ongoing tasks
+
+### How It Works
+
+1. **Create a task queue** - Set up a shared queue with a default reward amount
+2. **Queue your task** - Submit your transaction with a trigger (when to run it)
+3. **Crank turners execute** - Network participants monitor queues and execute ready tasks
+4. **Get paid/Pay out** - Task creators pay rewards, crank turners earn SOL
+
+The minimum deposit of 1 SOL for task queues encourages reuse and keeps the network efficient for crank turners to monitor.
 
 ## Running a Crank Turner
 
