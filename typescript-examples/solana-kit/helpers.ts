@@ -18,14 +18,14 @@ import {
   getInitializeTaskQueueV0Instruction,
   fetchMaybeTuktukConfigV0,
   fetchTaskQueueV0,
-} from "./dist/tuktuk-js-client/index.js";
+} from "./dist/tuktuk-client/index.js";
 import {
   CRON_PROGRAM_ADDRESS,
   fetchMaybeCronJobNameMappingV0,
   getInitializeCronJobV0InstructionAsync,
   fetchMaybeUserCronJobsV0,
   getAddCronTransactionV0Instruction,
-} from "./dist/cron-js-client/index.js";
+} from "./dist/cron-client/index.js";
 import { getTransferSolInstruction } from "@solana-program/system";
 
 const addressEncoder = getAddressEncoder();
